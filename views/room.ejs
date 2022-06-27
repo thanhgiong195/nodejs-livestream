@@ -7,9 +7,91 @@
     <script>
       const ROOM_ID = '<%= roomId %>';
     </script>
-    <script src="https://unpkg.com/peerjs@1.4.5/dist/peerjs.min.js" defer></script>
-    <script src="/socket.io/socket.io.js" defer></script>
-    <script src="script.js" defer></script>
+    <script src="https://unpkg.com/peerjs@1.4.5/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.5.0/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const videoGrid = document.getElementById('video-grid');
+      const myPeer = new Peer();
+      const myVideo = document.createElement('video');
+      myVideo.muted = true;
+      const peers = {};
+      navigator.mediaDevices
+        .getUserMedia({
+          video: true,
+          audio: true,
+        })
+        .then(stream => {
+          addVideoStream(myVideo, stream);
+          console.log('stream');
+          myPeer.on('call', call => {
+            console.log('stream call');
+            peers[call.peer] = call;
+            call.answer(stream);
+            const video = document.createElement('video');
+            call.on('stream', userVideoStream => {
+              addVideoStream(video, userVideoStream);
+            });
+
+            call.on('close', () => {
+              video.remove();
+            });
+          });
+
+          socket.on('user-connected', userId => {
+            console.log('user-connected');
+            connectToNewUser(userId, stream);
+          });
+        })
+        .catch(function (err) {
+          myPeer.on('call', call => {
+            console.log('stream call');
+            peers[call.peer] = call;
+
+            call.on('close', () => {
+              video.remove();
+            });
+          });
+          console.log('err', err);
+          /* handle the error */
+        });
+
+      // client-side
+      socket.on('connect', () => {
+        console.log('socket.id', socket.id); // ojIckSD2jqNzOqIrAGzL
+      });
+
+      socket.on('user-disconnected', userId => {
+        console.log('user-disconnected', userId);
+        if (peers[userId]) peers[userId].close();
+      });
+
+      myPeer.on('open', id => {
+        console.log('open', ROOM_ID, id);
+        socket.emit('join-room', ROOM_ID, id);
+      });
+
+      function connectToNewUser(userId, stream) {
+        const call = myPeer.call(userId, stream);
+        const video = document.createElement('video');
+        call.on('stream', userVideoStream => {
+          addVideoStream(video, userVideoStream);
+        });
+        call.on('close', () => {
+          video.remove();
+        });
+
+        peers[userId] = call;
+      }
+
+      function addVideoStream(video, stream) {
+        video.srcObject = stream;
+        video.addEventListener('loadedmetadata', () => {
+          video.play();
+        });
+        document.getElementById('video-grid').append(video);
+      }
+    </script>
     <title>Document</title>
     <style>
       #video-grid {
